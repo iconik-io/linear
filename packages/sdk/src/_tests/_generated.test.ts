@@ -871,6 +871,16 @@ describe("generated", () => {
       }
     });
 
+    /** Test the favorite.predefinedViewTeam query for L.Team */
+    it("favorite.predefinedViewTeam", async () => {
+      if (_favorite) {
+        const favorite_predefinedViewTeam: L.Team | undefined = await _favorite.predefinedViewTeam;
+        expect(favorite_predefinedViewTeam instanceof L.Team);
+      } else {
+        console.warn("codegen-doc:print: No Favorite found - cannot test favorite.predefinedViewTeam query");
+      }
+    });
+
     /** Test the favorite.project query for L.Project */
     it("favorite.project", async () => {
       if (_favorite) {

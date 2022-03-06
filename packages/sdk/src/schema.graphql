@@ -129,6 +129,10 @@ type ArchiveResponse {
   """
   databaseVersion: Float!
   """
+  Whether the dependencies for the model objects are included in the archive.
+  """
+  includesDependencies: Boolean!
+  """
   The total number of entities in the archive.
   """
   totalCount: Float!
@@ -561,6 +565,10 @@ input BooleanComparator {
   Equals constraint.
   """
   eq: Boolean
+  """
+  Not equals constraint.
+  """
+  neq: Boolean
 }
 
 type Card {
@@ -1866,6 +1874,14 @@ type Favorite implements Node {
   """
   parent: Favorite
   """
+  The team of the favorited predefiend view.
+  """
+  predefinedViewTeam: Team
+  """
+  The type of favorited predefiend view.
+  """
+  predefinedViewType: String
+  """
   The favorited project.
   """
   project: Project
@@ -1932,6 +1948,14 @@ input FavoriteCreateInput {
   """
   parentId: String
   """
+  The identifier of team for the predefined view to favorite.
+  """
+  predefinedViewTeamId: String
+  """
+  The type of the predefined view to favorite.
+  """
+  predefinedViewType: String
+  """
   The identifier of the project to favorite.
   """
   projectId: String
@@ -1969,6 +1993,10 @@ type FavoritePayload {
 }
 
 input FavoriteUpdateInput {
+  """
+  The name of the favorite folder.
+  """
+  folderName: String
   """
   The id of the folder to move the favorite under.
   """
@@ -2899,7 +2927,7 @@ input IssueCollectionFilter {
   """
   Filters that the issues creator must satisfy.
   """
-  creator: UserFilter
+  creator: NullableUserFilter
   """
   Filters that the issues cycle must satisfy.
   """
@@ -3063,40 +3091,6 @@ input IssueCreateInput {
   title: String!
 }
 
-type IssueDescriptionHistory {
-  """
-  The ID of the author of the change.
-  """
-  actorId: String
-  """
-  The description data of the issue as a JSON serialized string.
-  """
-  descriptionData: String!
-  """
-  The UUID of the change.
-  """
-  id: String!
-  """
-  The type of the revision, whether it was the creation or update of the issue.
-  """
-  type: String!
-  """
-  The date when the description was updated.
-  """
-  updatedAt: DateTime!
-}
-
-type IssueDescriptionHistoryPayload {
-  """
-  The issue that was created or updated.
-  """
-  history: [IssueDescriptionHistory!]
-  """
-  Whether the operation was successful.
-  """
-  success: Boolean!
-}
-
 type IssueEdge {
   """
   Used in `before` and `after` args
@@ -3152,7 +3146,7 @@ input IssueFilter {
   """
   Filters that the issues creator must satisfy.
   """
-  creator: UserFilter
+  creator: NullableUserFilter
   """
   Filters that the issues cycle must satisfy.
   """
@@ -3243,6 +3237,10 @@ type IssueHistory implements Node {
   The time at which the entity was archived. Null if the entity has not been archived.
   """
   archivedAt: DateTime
+  """
+  The linked attachment.
+  """
+  attachment: Attachment
   autoArchived: Boolean
   autoClosed: Boolean
   """
@@ -4780,7 +4778,7 @@ type Mutation {
   """
   Enables Loom integration for the organization.
   """
-  integrationLoom: IntegrationPayload!
+  integrationLoom: IntegrationPayload! @deprecated(reason: "Not available.")
   """
   Archives an integration resource.
   """
@@ -5141,7 +5139,7 @@ type Mutation {
     The identifier of the label to archive.
     """
     id: String!
-  ): ArchivePayload!
+  ): ArchivePayload! @deprecated(reason: "Labels are deleted instead of archived.")
   """
   Creates a new label.
   """
@@ -5155,6 +5153,15 @@ type Mutation {
     """
     replaceTeamLabels: Boolean
   ): IssueLabelPayload!
+  """
+  Deletes an issue label.
+  """
+  issueLabelDelete(
+    """
+    The identifier of the label to delete.
+    """
+    id: String!
+  ): ArchivePayload!
   """
   Updates an label.
   """
@@ -6595,6 +6602,14 @@ input NullableTimelessDateComparator {
 """
 input NullableUserFilter {
   """
+  Comparator for the user's activity status.
+  """
+  active: BooleanComparator
+  """
+  Comparator for the user's admin status.
+  """
+  admin: BooleanComparator
+  """
   Compound filters, all of which need to be matched by the user.
   """
   and: [UserFilter!]
@@ -6607,11 +6622,11 @@ input NullableUserFilter {
   """
   createdAt: DateComparator
   """
-  Comparator for the users display name.
+  Comparator for the user's display name.
   """
   displayName: StringComparator
   """
-  Comparator for the users email.
+  Comparator for the user's email.
   """
   email: StringComparator
   """
@@ -6623,7 +6638,7 @@ input NullableUserFilter {
   """
   isMe: BooleanComparator
   """
-  Comparator for the users name.
+  Comparator for the user's name.
   """
   name: StringComparator
   """
@@ -7309,6 +7324,10 @@ type OrganizationInvite implements Node {
   """
   organization: Organization!
   """
+  The permission that the invitee will receive upon accepting invite.
+  """
+  permission: String
+  """
   The last time at which the entity was updated. This is the same as the creation time if the
       entity hasn't been update after creation.
   """
@@ -7334,6 +7353,10 @@ input OrganizationInviteCreateInput {
   The message to send to the invitee.
   """
   message: String
+  """
+  Whether the invite should grant admin permissions.
+  """
+  permission: String
   """
   The teams that the user has been invited to.
   """
@@ -7373,6 +7396,10 @@ type OrganizationInviteDetailsPayload {
   Name of the workspace the invite is for.
   """
   organizationName: String!
+  """
+  Whether the invite should grant admin permissions
+  """
+  permission: String
 }
 
 type OrganizationInviteEdge {
@@ -8268,6 +8295,10 @@ type Query {
   """
   applicationWithAuthorization(
     """
+    Actor mode used for the authorization.
+    """
+    actor: String = "user"
+    """
     The client ID of the application.
     """
     clientId: String!
@@ -8590,6 +8621,10 @@ type Query {
     """
     identifier: String!
     """
+    Whether to also include the dependent model referenced by the given identifier in the response.
+    """
+    includeDependent: Boolean
+    """
     The class name of the model to load.
     """
     modelClass: String!
@@ -8781,10 +8816,6 @@ type Query {
   One specific issue.
   """
   issue(id: String!): Issue!
-  """
-  [Internal] The history of issue descriptions.
-  """
-  issueDescriptionHistory(id: String!): IssueDescriptionHistoryPayload!
   """
   Fetches the GitHub token, completing the OAuth flow.
   """
@@ -11529,6 +11560,14 @@ type UserEdge {
 """
 input UserFilter {
   """
+  Comparator for the user's activity status.
+  """
+  active: BooleanComparator
+  """
+  Comparator for the user's admin status.
+  """
+  admin: BooleanComparator
+  """
   Compound filters, all of which need to be matched by the user.
   """
   and: [UserFilter!]
@@ -11541,11 +11580,11 @@ input UserFilter {
   """
   createdAt: DateComparator
   """
-  Comparator for the users display name.
+  Comparator for the user's display name.
   """
   displayName: StringComparator
   """
-  Comparator for the users email.
+  Comparator for the user's email.
   """
   email: StringComparator
   """
@@ -11557,7 +11596,7 @@ input UserFilter {
   """
   isMe: BooleanComparator
   """
-  Comparator for the users name.
+  Comparator for the user's name.
   """
   name: StringComparator
   """
@@ -11844,6 +11883,7 @@ enum ViewType {
   project
   projects
   roadmap
+  search
   triage
   userProfile
 }

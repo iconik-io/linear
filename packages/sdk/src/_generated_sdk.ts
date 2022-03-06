@@ -293,6 +293,7 @@ export class ArchiveResponse extends Request {
     super(request);
     this.archive = data.archive;
     this.databaseVersion = data.databaseVersion;
+    this.includesDependencies = data.includesDependencies;
     this.totalCount = data.totalCount;
   }
 
@@ -300,6 +301,8 @@ export class ArchiveResponse extends Request {
   public archive: string;
   /** The version of the remote database. Incremented by 1 for each migration run on the database. */
   public databaseVersion: number;
+  /** Whether the dependencies for the model objects are included in the archive. */
+  public includesDependencies: boolean;
   /** The total number of entities in the archive. */
   public totalCount: number;
 }
@@ -1521,6 +1524,7 @@ export class Favorite extends Request {
   private _issue?: L.FavoriteFragment["issue"];
   private _label?: L.FavoriteFragment["label"];
   private _parent?: L.FavoriteFragment["parent"];
+  private _predefinedViewTeam?: L.FavoriteFragment["predefinedViewTeam"];
   private _project?: L.FavoriteFragment["project"];
   private _projectTeam?: L.FavoriteFragment["projectTeam"];
   private _user: L.FavoriteFragment["user"];
@@ -1531,6 +1535,7 @@ export class Favorite extends Request {
     this.createdAt = parseDate(data.createdAt) ?? new Date();
     this.folderName = data.folderName ?? undefined;
     this.id = data.id;
+    this.predefinedViewType = data.predefinedViewType ?? undefined;
     this.sortOrder = data.sortOrder;
     this.type = data.type;
     this.updatedAt = parseDate(data.updatedAt) ?? new Date();
@@ -1540,6 +1545,7 @@ export class Favorite extends Request {
     this._issue = data.issue ?? undefined;
     this._label = data.label ?? undefined;
     this._parent = data.parent ?? undefined;
+    this._predefinedViewTeam = data.predefinedViewTeam ?? undefined;
     this._project = data.project ?? undefined;
     this._projectTeam = data.projectTeam ?? undefined;
     this._user = data.user;
@@ -1553,6 +1559,8 @@ export class Favorite extends Request {
   public folderName?: string;
   /** The unique identifier of the entity. */
   public id: string;
+  /** The type of favorited predefiend view. */
+  public predefinedViewType?: string;
   /** The order of the item in the favorites list. */
   public sortOrder: number;
   /** The type of the favorite. */
@@ -1585,6 +1593,10 @@ export class Favorite extends Request {
   /** The parent folder of the favorite. */
   public get parent(): LinearFetch<Favorite> | undefined {
     return this._parent?.id ? new FavoriteQuery(this._request).fetch(this._parent?.id) : undefined;
+  }
+  /** The team of the favorited predefiend view. */
+  public get predefinedViewTeam(): LinearFetch<Team> | undefined {
+    return this._predefinedViewTeam?.id ? new TeamQuery(this._request).fetch(this._predefinedViewTeam?.id) : undefined;
   }
   /** The favorited project. */
   public get project(): LinearFetch<Project> | undefined {
@@ -2382,51 +2394,6 @@ export class IssueConnection extends Connection<Issue> {
   }
 }
 /**
- * IssueDescriptionHistory model
- *
- * @param request - function to call the graphql client
- * @param data - L.IssueDescriptionHistoryFragment response data
- */
-export class IssueDescriptionHistory extends Request {
-  public constructor(request: LinearRequest, data: L.IssueDescriptionHistoryFragment) {
-    super(request);
-    this.actorId = data.actorId ?? undefined;
-    this.descriptionData = data.descriptionData;
-    this.id = data.id;
-    this.type = data.type;
-    this.updatedAt = parseDate(data.updatedAt) ?? new Date();
-  }
-
-  /** The ID of the author of the change. */
-  public actorId?: string;
-  /** The description data of the issue as a JSON serialized string. */
-  public descriptionData: string;
-  /** The UUID of the change. */
-  public id: string;
-  /** The type of the revision, whether it was the creation or update of the issue. */
-  public type: string;
-  /** The date when the description was updated. */
-  public updatedAt: Date;
-}
-/**
- * IssueDescriptionHistoryPayload model
- *
- * @param request - function to call the graphql client
- * @param data - L.IssueDescriptionHistoryPayloadFragment response data
- */
-export class IssueDescriptionHistoryPayload extends Request {
-  public constructor(request: LinearRequest, data: L.IssueDescriptionHistoryPayloadFragment) {
-    super(request);
-    this.success = data.success;
-    this.history = data.history ? data.history.map(node => new IssueDescriptionHistory(request, node)) : undefined;
-  }
-
-  /** Whether the operation was successful. */
-  public success: boolean;
-  /** The issue that was created or updated. */
-  public history?: IssueDescriptionHistory[];
-}
-/**
  * A record of changes to an issue.
  *
  * @param request - function to call the graphql client
@@ -2434,6 +2401,7 @@ export class IssueDescriptionHistoryPayload extends Request {
  */
 export class IssueHistory extends Request {
   private _actor?: L.IssueHistoryFragment["actor"];
+  private _attachment?: L.IssueHistoryFragment["attachment"];
   private _fromAssignee?: L.IssueHistoryFragment["fromAssignee"];
   private _fromCycle?: L.IssueHistoryFragment["fromCycle"];
   private _fromParent?: L.IssueHistoryFragment["fromParent"];
@@ -2475,6 +2443,7 @@ export class IssueHistory extends Request {
       ? data.relationChanges.map(node => new IssueRelationHistoryPayload(request, node))
       : undefined;
     this._actor = data.actor ?? undefined;
+    this._attachment = data.attachment ?? undefined;
     this._fromAssignee = data.fromAssignee ?? undefined;
     this._fromCycle = data.fromCycle ?? undefined;
     this._fromParent = data.fromParent ?? undefined;
@@ -2538,6 +2507,10 @@ export class IssueHistory extends Request {
   /** The user who made these changes. If null, possibly means that the change made by an integration. */
   public get actor(): LinearFetch<User> | undefined {
     return this._actor?.id ? new UserQuery(this._request).fetch(this._actor?.id) : undefined;
+  }
+  /** The linked attachment. */
+  public get attachment(): LinearFetch<Attachment> | undefined {
+    return this._attachment?.id ? new AttachmentQuery(this._request).fetch(this._attachment?.id) : undefined;
   }
   /** The user from whom the issue was re-assigned from. */
   public get fromAssignee(): LinearFetch<User> | undefined {
@@ -2764,6 +2737,10 @@ export class IssueLabel extends Request {
   /** Archives an issue label. */
   public archive() {
     return new IssueLabelArchiveMutation(this._request).fetch(this.id);
+  }
+  /** Deletes an issue label. */
+  public delete() {
+    return new IssueLabelDeleteMutation(this._request).fetch(this.id);
   }
   /** Updates an label. */
   public update(input: L.IssueLabelUpdateInput) {
@@ -3773,6 +3750,7 @@ export class OrganizationInvite extends Request {
     this.expiresAt = parseDate(data.expiresAt) ?? undefined;
     this.external = data.external;
     this.id = data.id;
+    this.permission = data.permission ?? undefined;
     this.updatedAt = parseDate(data.updatedAt) ?? new Date();
     this._invitee = data.invitee ?? undefined;
     this._inviter = data.inviter;
@@ -3792,6 +3770,8 @@ export class OrganizationInvite extends Request {
   public external: boolean;
   /** The unique identifier of the entity. */
   public id: string;
+  /** The permission that the invitee will receive upon accepting invite. */
+  public permission?: string;
   /**
    * The last time at which the entity was updated. This is the same as the creation time if the
    *     entity hasn't been update after creation.
@@ -3853,6 +3833,7 @@ export class OrganizationInviteDetailsPayload extends Request {
     this.organizationId = data.organizationId;
     this.organizationLogoUrl = data.organizationLogoUrl ?? undefined;
     this.organizationName = data.organizationName;
+    this.permission = data.permission ?? undefined;
   }
 
   /** Whether the invite has already been accepted. */
@@ -3871,6 +3852,8 @@ export class OrganizationInviteDetailsPayload extends Request {
   public organizationLogoUrl?: string;
   /** Name of the workspace the invite is for. */
   public organizationName: string;
+  /** Whether the invite should grant admin permissions */
+  public permission?: string;
 }
 /**
  * OrganizationInvitePayload model
@@ -10324,6 +10307,34 @@ export class IssueLabelCreateMutation extends Request {
 }
 
 /**
+ * A fetchable IssueLabelDelete Mutation
+ *
+ * @param request - function to call the graphql client
+ */
+export class IssueLabelDeleteMutation extends Request {
+  public constructor(request: LinearRequest) {
+    super(request);
+  }
+
+  /**
+   * Call the IssueLabelDelete mutation and return a ArchivePayload
+   *
+   * @param id - required id to pass to issueLabelDelete
+   * @returns parsed response from IssueLabelDeleteMutation
+   */
+  public async fetch(id: string): LinearFetch<ArchivePayload> {
+    const response = await this._request<L.IssueLabelDeleteMutation, L.IssueLabelDeleteMutationVariables>(
+      L.IssueLabelDeleteDocument,
+      {
+        id,
+      }
+    );
+    const data = response.issueLabelDelete;
+    return new ArchivePayload(this._request, data);
+  }
+}
+
+/**
  * A fetchable IssueLabelUpdate Mutation
  *
  * @param request - function to call the graphql client
@@ -16351,6 +16362,15 @@ export class LinearSdk extends Request {
     variables?: Omit<L.IssueLabelCreateMutationVariables, "input">
   ): LinearFetch<IssueLabelPayload> {
     return new IssueLabelCreateMutation(this._request).fetch(input, variables);
+  }
+  /**
+   * Deletes an issue label.
+   *
+   * @param id - required id to pass to issueLabelDelete
+   * @returns ArchivePayload
+   */
+  public issueLabelDelete(id: string): LinearFetch<ArchivePayload> {
+    return new IssueLabelDeleteMutation(this._request).fetch(id);
   }
   /**
    * Updates an label.
