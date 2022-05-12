@@ -8,6 +8,7 @@ import { githubImport } from "./importers/github";
 import { jiraCsvImport } from "./importers/jiraCsv";
 import { linearCsvImporter } from "./importers/linearCsv";
 import { pivotalCsvImport } from "./importers/pivotalCsv";
+import { redmineCsvImport } from "./importers/redmineCsv";
 import { trelloJsonImport } from "./importers/trelloJson";
 import { importIssues } from "./importIssues";
 import { ImportAnswers } from "./types";
@@ -44,6 +45,10 @@ inquirer.registerPrompt("filePath", require("inquirer-file-path"));
             value: "pivotalCsv",
           },
           {
+            name: "Redmine (CSV export)",
+            value: "redmineCsv",
+          },
+          {
             name: "Clubhouse (CSV export)",
             value: "clubhouseCsv",
           },
@@ -73,6 +78,9 @@ inquirer.registerPrompt("filePath", require("inquirer-file-path"));
         break;
       case "pivotalCsv":
         importer = await pivotalCsvImport();
+        break;
+      case "redmineCsv":
+        importer = await redmineCsvImport();
         break;
       case "clubhouseCsv":
         importer = await clubhouseCsvImport();

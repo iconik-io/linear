@@ -270,7 +270,7 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
 
     const formattedDueDate = issue.dueDate ? format(issue.dueDate, "yyyy-MM-dd") : undefined;
 
-    await client.issueCreate({
+    const newIssue = await client.issueCreate({
       teamId,
       projectId: projectId as unknown as string,
       title: issue.title,
@@ -281,6 +281,16 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
       assigneeId,
       dueDate: formattedDueDate,
     });
+    const newId = newIssue._issue.id;
+    //console.error(JSON.stringify(await client.issue(newId), null, 4));
+    if (!!issue.url) {
+      client.attachmentLinkURL(newId, issue.url, { title: "Original Redmine issue" });
+    }
+    if (!!issue.extraUrls) {
+      for (const url of issue.extraUrls) {
+        client.attachmentLinkURL(newId, url.url, !!url.title ? { title: url.title } : {});
+      }
+    }
   }
 
   console.error(

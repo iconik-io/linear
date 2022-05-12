@@ -22,7 +22,7 @@
     "cli": "ts-node src/cli",
     "dev:import": "NODE_ENV=development yarn build:import",
     "build:import": "run-s build:clean build:rollup",
-    "build:rollup": "npx rollup -c",
+    "build:rollup": "npx rollup -c -w",
     "build:clean": "npx rimraf dist"
   },
   "dependencies": {
