@@ -34,7 +34,8 @@
     "inquirer-file-path": "1.0.1",
     "jira2md": "2.0.4",
     "lodash": "4.17.20",
-    "node-fetch": "2.6.1"
+    "node-fetch": "2.6.1",
+    "node-pandoc": "0.3.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^17.1.0",

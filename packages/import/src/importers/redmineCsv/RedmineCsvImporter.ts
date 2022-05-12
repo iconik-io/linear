@@ -2,7 +2,6 @@ import csv from "csvtojson";
 //import { roundToNearestMinutes } from "date-fns";
 import { Importer, ImportResult } from "../../types";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const j2m = require("jira2md");
 
 type RedmineStoryType = "Internal Bug" | "Internal Feature";
 
@@ -14,7 +13,7 @@ interface RedmineIssueType {
   "Iteration Start": string;
   "Iteration End": string;
   Tracker: RedmineStoryType;
-  Estimate: string;
+  Priority: string;
   "Current State": string;
   "Created at": Date;
   "Accepted at": Date;
@@ -73,9 +72,19 @@ export class RedmineCsvImporter implements Importer {
 
       //const url = row.URL;
       const url = "https://redmine.iconik.biz/issues/" + row["#"];
-      const mdDesc = j2m.to_markdown(row.Description);
-      const description = mdDesc;
-
+      let pandoc = require('node-pandoc'),
+        src = row.Description,
+        args = '-f textile -t markdown';
+      // Set your callback function
+      const description :string = await new Promise((resolve, reject) => {
+        pandoc(src, args, function(err: string, result: string): void {
+          if (err) {
+            reject(err)
+            return;
+          }
+          resolve(result)
+        })
+      });
       // const priority = parseInt(row['Estimate']) ||  undefined;
 
       const tags = row.Tags.split(",");
@@ -94,6 +103,17 @@ export class RedmineCsvImporter implements Importer {
             //console.error(`Adding URL: ${r.trim()}`);
           }
         }
+      }
+
+      var priority = parseInt(row.Priority.substring(0,1))
+      if (priority > 7) {
+        priority = 1;
+      } else if  (priority > 5) {
+        priority = 2;
+      } else if (priority > 3) {
+        priority = 3;
+      } else {
+        priority = 4;
       }
 
       const assigneeId = row["Assignee"] && row["Assignee"].length > 0 ? row["Assignee"] : undefined;
@@ -121,6 +141,7 @@ export class RedmineCsvImporter implements Importer {
         assigneeId,
         labels,
         createdAt,
+        priority
       });
 
       for (const lab of labels) {
