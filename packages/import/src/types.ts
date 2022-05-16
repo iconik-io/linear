@@ -26,6 +26,10 @@ export interface Issue {
   completedAt?: Date;
   /** When the issue was started. */
   startedAt?: Date;
+  /** Original ID. */
+  originalId?: string;
+  /** List of related original Ids. */
+  relatedOriginalIds?: string[];
 }
 
 /** Issue comment */

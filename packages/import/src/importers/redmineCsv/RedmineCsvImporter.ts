@@ -15,7 +15,7 @@ interface RedmineIssueType {
   Tracker: RedmineStoryType;
   Priority: string;
   "Current State": string;
-  "Created at": Date;
+  Created: Date;
   "Accepted at": Date;
   "Category-Iconik": string;
   "Requested By": string;
@@ -71,9 +71,14 @@ export class RedmineCsvImporter implements Importer {
       }
 
       //const url = row.URL;
-      const url = "https://redmine.iconik.biz/issues/" + row["#"];
+      const originalId = row["#"];
+      var pandocSource = row.Description
+      const url = "https://redmine.iconik.biz/issues/" + originalId;
+      if (row.Description.startsWith("http")) {
+         pandocSource = ".\n" + row.Description;
+      } 
       let pandoc = require('node-pandoc'),
-        src = row.Description,
+        src = pandocSource,
         args = '-f textile -t markdown';
       // Set your callback function
       const description :string = await new Promise((resolve, reject) => {
@@ -102,6 +107,13 @@ export class RedmineCsvImporter implements Importer {
             }
             //console.error(`Adding URL: ${r.trim()}`);
           }
+        }
+      }
+      const relatedOriginalIds = [];
+      const relatedIssues=row["Related issues"].split(",");
+      if(!!relatedIssues){
+        for (const i of relatedIssues) {
+          relatedOriginalIds.push(i.slice(1+i.indexOf("#")))
         }
       }
 
@@ -141,7 +153,9 @@ export class RedmineCsvImporter implements Importer {
         assigneeId,
         labels,
         createdAt,
-        priority
+        priority,
+        originalId,
+        relatedOriginalIds,
       });
 
       for (const lab of labels) {

@@ -220,6 +220,7 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
     }
   }
 
+  const originalIdmap = {} as {[name: string]: string};
   // Create issues
   for (const issue of importData.issues) {
     const issueDescription = issue.description
@@ -282,6 +283,18 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
       dueDate: formattedDueDate,
     });
     const newId = newIssue._issue.id;
+    if (!!issue.originalId) {
+      originalIdmap[issue.originalId] = newId;
+      console.error(`Adding ${issue.originalId} to ${newId} `)
+    }
+    if (!!issue.relatedOriginalIds) {
+      for (const relatedId of issue.relatedOriginalIds) {
+        console.error(`Checking ${relatedId}`)
+        if(!!originalIdmap[relatedId]) {
+          client.issueRelationCreate({issueId: newId, relatedIssueId: originalIdmap[relatedId], type: "related"})
+        }
+      }
+    }
     //console.error(JSON.stringify(await client.issue(newId), null, 4));
     if (!!issue.url) {
       client.attachmentLinkURL(newId, issue.url, { title: "Original Redmine issue" });
