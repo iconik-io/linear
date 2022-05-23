@@ -2,6 +2,8 @@ import csv from "csvtojson";
 //import { roundToNearestMinutes } from "date-fns";
 import { Importer, ImportResult } from "../../types";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+var https = require('https');
+var fs = require('fs');
 
 type RedmineStoryType = "Internal Bug" | "Internal Feature";
 
@@ -63,6 +65,11 @@ export class RedmineCsvImporter implements Importer {
         name: user,
       };
     }
+    const hostname =  'https://redmine.iconik.biz'
+    const config = {
+      apiKey: '7db9d4d08352f61f80457e4d31a530de5dd2f1df',
+      rejectUnauthorized: process.env.REJECT_UNAUTHORIZED
+    }
 
     for (const row of data) {
       const title = row.Subject;
@@ -91,6 +98,46 @@ export class RedmineCsvImporter implements Importer {
         })
       });
       // const priority = parseInt(row['Estimate']) ||  undefined;
+      const Redmine = require('axios-redmine')
+
+      // protocol required in Hostname, supports both HTTP and HTTPS
+      var attachments: any[] = [];
+      const redmine = new Redmine(hostname, config)
+      const dumpIssue = function (issue: any) {
+        console.log('Dumping issue:')
+        for (const item in issue) {
+          console.log('  ' + item + ': ' + JSON.stringify(issue[item]))
+        }
+      }
+      const params = { include: 'attachments,journals,watchers' }
+      await redmine
+      .get_issue_by_id(parseInt(originalId), params)
+      .then(response => {
+        attachments = response.data.issue.attachments;
+      })
+      .catch(err => {
+        console.log(err)
+      })
+
+      if (!!attachments && (attachments.length > 0)) {
+        console.log(`Attachments2: ${JSON.stringify(attachments)}`)
+        const dir = `/tmp/redmineimporter/${parseInt(originalId)}`;
+        if (!fs.existsSync(dir)){
+          fs.mkdirSync(dir, { recursive: true });
+        }      
+        for (const attachment of attachments) {
+          const file = fs.createWriteStream(`${dir}/${attachment.filename}`);
+          const request = https.get(attachment.content_url, {headers: {"X-Redmine-API-Key": config.apiKey}}, function(response) {
+            response.pipe(file);
+
+            // after download completed close filestream
+            file.on("finish", () => {
+                file.close();
+                console.log("Download Completed");
+            });
+          });
+        }
+      }
 
       const tags = row.Tags.split(",");
       const categories = row["Category-Iconik"].split(",");
@@ -143,7 +190,7 @@ export class RedmineCsvImporter implements Importer {
         labels = labels.concat(categories.filter(tag => !!tag));
       }
       const createdAt = row["Created"];
-
+      console.log(description)
       importData.issues.push({
         title,
         description,

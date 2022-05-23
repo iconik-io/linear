@@ -6,6 +6,8 @@ import * as inquirer from "inquirer";
 import _ from "lodash";
 import { Comment, Importer, ImportResult } from "./types";
 import { replaceImagesInMarkdown } from "./utils/replaceImages";
+var axios = require('axios');
+var fs = require('fs');
 
 interface ImportAnswers {
   newTeam: boolean;
@@ -223,9 +225,8 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
   const originalIdmap = {} as {[name: string]: string};
   // Create issues
   for (const issue of importData.issues) {
-    const issueDescription = issue.description
-      ? await replaceImagesInMarkdown(client, issue.description, importData.resourceURLSuffix)
-      : undefined;
+    const issueDescription = issue.description;
+      
 
     const description =
       importAnswers.includeComments && issue.comments
@@ -283,6 +284,8 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
       dueDate: formattedDueDate,
     });
     const newId = newIssue._issue.id;
+    var descriptionData = newIssue._issue;
+    console.log(JSON.stringify(newIssue))
     if (!!issue.originalId) {
       originalIdmap[issue.originalId] = newId;
       console.error(`Adding ${issue.originalId} to ${newId} `)
@@ -297,11 +300,64 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
     }
     //console.error(JSON.stringify(await client.issue(newId), null, 4));
     if (!!issue.url) {
-      client.attachmentLinkURL(newId, issue.url, { title: "Original Redmine issue" });
+      await client.attachmentLinkURL(newId, issue.url, { title: "Original Redmine issue" });
     }
     if (!!issue.extraUrls) {
       for (const url of issue.extraUrls) {
-        client.attachmentLinkURL(newId, url.url, !!url.title ? { title: url.title } : {});
+        await client.attachmentLinkURL(newId, url.url, !!url.title ? { title: url.title } : {});
+      }
+    }
+    var files = [];
+    const dir = `/tmp/redmineimporter/${issue.originalId}`;
+    if(!!issue.originalId) {
+      if (fs.existsSync(dir)){
+        fs.readdirSync(dir).forEach(file => {
+          console.log(file);
+          files.push(file)
+        });
+      }          
+    }
+    if(!!files) {
+      var desc = description
+      var attachmentHeader = "# Attachments:\n\n"
+      for (const file of files) {
+        var contentType = "application/octet-stream"
+        var isImage = ""
+        if (file.toLowerCase().includes(".jpg")) {
+          contentType = "image/jpg";
+          isImage="!";
+        } else if (file.toLowerCase().includes(".png")) {
+          contentType = "image/png";
+          isImage="!";
+        }
+        var stats = fs.statSync(dir+"/"+file)
+        var fileSizeInBytes = stats.size;
+
+        const uploadData = await client.fileUpload(contentType, file, fileSizeInBytes);
+        console.log(`UPLOAD: ${JSON.stringify(uploadData)}`)
+        const stream = fs.createReadStream(dir+"/"+file);
+        var headers = {};
+        for (const h of uploadData.uploadFile.headers) {
+            headers[h.key] = h.value;
+        }
+        headers["content-type"] = uploadData.uploadFile?.contentType;
+        const upload = await axios({
+          method: "put",
+          url: uploadData.uploadFile?.uploadUrl,
+          data: stream,
+          headers: headers,
+        });
+        console.log(`RESULT: ${upload.status}`)
+        const issue = await client.issue(newId);
+        console.log(JSON.stringify(issue))
+        const imageString = `![](${file})`;
+        if(desc?.includes(imageString)) {
+          desc = desc.replace(imageString, `${isImage}[${file}](${uploadData.uploadFile?.assetUrl})`)
+        } else {
+          desc = desc + `\n${attachmentHeader}${isImage}[${file}](${uploadData.uploadFile?.assetUrl})\n`
+          attachmentHeader = ""
+        }
+        await client.issueUpdate(newId, {description: desc })
       }
     }
   }
