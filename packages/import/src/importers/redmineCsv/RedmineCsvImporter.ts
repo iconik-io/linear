@@ -1,13 +1,17 @@
+/* eslint-disable no-console */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import csv from "csvtojson";
 //import { roundToNearestMinutes } from "date-fns";
-import { Importer, ImportResult } from "../../types";
+import { Comment, Importer, ImportResult } from "../../types";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-var https = require('https');
-var fs = require('fs');
+const https = require("https");
+const fs = require("fs");
 
 type RedmineStoryType = "Internal Bug" | "Internal Feature";
 
 interface RedmineIssueType {
+  Assignee: string;
+  Status: string;
   "#": string;
   Subject: string;
   Tags: string;
@@ -58,18 +62,14 @@ export class RedmineCsvImporter implements Importer {
       statuses: {},
     };
 
-    const assignees = Array.from(new Set(data.map(row => row["Assignee"])));
+    const assignees = Array.from(new Set(data.map(row => row.Assignee)));
+    const users = new Set(assignees);
 
-    for (const user of assignees) {
-      importData.users[user] = {
-        name: user,
-      };
-    }
-    const hostname =  'https://redmine.iconik.biz'
+    const hostname = "https://redmine.iconik.biz";
     const config = {
-      apiKey: '7db9d4d08352f61f80457e4d31a530de5dd2f1df',
-      rejectUnauthorized: process.env.REJECT_UNAUTHORIZED
-    }
+      apiKey: "7db9d4d08352f61f80457e4d31a530de5dd2f1df",
+      rejectUnauthorized: process.env.REJECT_UNAUTHORIZED,
+    };
 
     for (const row of data) {
       const title = row.Subject;
@@ -79,74 +79,94 @@ export class RedmineCsvImporter implements Importer {
 
       //const url = row.URL;
       const originalId = row["#"];
-      var pandocSource = row.Description
+      let pandocSource = row.Description;
       const url = "https://redmine.iconik.biz/issues/" + originalId;
-      if (row.Description.startsWith("http")) {
-         pandocSource = ".\n" + row.Description;
-      } 
-      let pandoc = require('node-pandoc'),
+      if (row.Description?.startsWith("http")) {
+        pandocSource = ".\n" + row.Description;
+      }
+      pandocSource += "\n\n";
+      const pandoc = require("node-pandoc"),
         src = pandocSource,
-        args = '-f textile -t markdown';
+        args = "-f textile -t markdown";
       // Set your callback function
-      const description :string = await new Promise((resolve, reject) => {
-        pandoc(src, args, function(err: string, result: string): void {
+      let description: string = await new Promise((resolve, reject) => {
+        pandoc(src, args, function (err: string, result: string): void {
           if (err) {
-            reject(err)
+            reject(err);
             return;
           }
-          resolve(result)
-        })
+          resolve(result);
+        });
       });
       // const priority = parseInt(row['Estimate']) ||  undefined;
-      const Redmine = require('axios-redmine')
+      const Redmine = require("axios-redmine");
 
       // protocol required in Hostname, supports both HTTP and HTTPS
-      var attachments: any[] = [];
-      const redmine = new Redmine(hostname, config)
+      const redmine = new Redmine(hostname, config);
       const dumpIssue = function (issue: any) {
-        console.log('Dumping issue:')
+        console.log("Dumping issue:");
         for (const item in issue) {
-          console.log('  ' + item + ': ' + JSON.stringify(issue[item]))
+          console.log("  " + item + ": " + JSON.stringify(issue[item]));
         }
+      };
+      const params = { include: "attachments,journals,watchers" };
+      const response = await redmine.get_issue_by_id(parseInt(originalId), params).catch((err: unknown) => {
+        console.log(err);
+        return undefined;
+      });
+      if (response === undefined) {
+        console.log("Skipping redmine issue:", originalId);
+        continue;
       }
-      const params = { include: 'attachments,journals,watchers' }
-      await redmine
-      .get_issue_by_id(parseInt(originalId), params)
-      .then(response => {
-        attachments = response.data.issue.attachments;
-      })
-      .catch(err => {
-        console.log(err)
-      })
 
-      if (!!attachments && (attachments.length > 0)) {
-        console.log(`Attachments2: ${JSON.stringify(attachments)}`)
+      const attachments: any[] = response.data.issue.attachments.filter(
+        (attachment: any) => attachment.filesize < 50000000
+      );
+
+      if (!!attachments && attachments.length > 0) {
+        console.log(`Attachments2: ${JSON.stringify(attachments)}`);
         const dir = `/tmp/redmineimporter/${parseInt(originalId)}`;
-        if (!fs.existsSync(dir)){
+        if (!fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
-        }      
+        }
         for (const attachment of attachments) {
           const file = fs.createWriteStream(`${dir}/${attachment.filename}`);
-          const request = https.get(attachment.content_url, {headers: {"X-Redmine-API-Key": config.apiKey}}, function(response) {
-            response.pipe(file);
+          const request = https.get(
+            attachment.content_url,
+            { headers: { "X-Redmine-API-Key": config.apiKey } },
+            function (response: any) {
+              response.pipe(file);
 
-            // after download completed close filestream
-            file.on("finish", () => {
+              // after download completed close filestream
+              file.on("finish", () => {
                 file.close();
-                console.log("Download Completed");
-            });
-          });
+                // console.log("Download Completed");
+              });
+            }
+          );
         }
       }
+
+      const journals: any[] = response.data.issue.journals;
+      const comments = journals
+        .filter(journal => journal.notes !== undefined && journal.notes.length !== 0)
+        .map(
+          (journal: any): Comment => ({
+            body: journal.notes,
+            userId: journal.user.name,
+            createdAt: new Date(journal.created_on),
+          })
+        );
+      comments.forEach(({ userId }) => users.add(userId));
 
       const tags = row.Tags.split(",");
       const categories = row["Category-Iconik"].split(",");
-      const refs = row["Internal Reference"].split("\n");
+      const refs = row["Internal Reference"].split(/[\n\s]/);
       const extraUrls = [];
       if (!!refs) {
         for (const r of refs) {
           //console.error(r.trim());
-          if (r.startsWith("http")) {
+          if (r?.startsWith("http")) {
             if (r.includes("support.iconik.io")) {
               extraUrls.push({ url: r.trim(), title: "Zoho desk issue" });
             } else {
@@ -157,17 +177,17 @@ export class RedmineCsvImporter implements Importer {
         }
       }
       const relatedOriginalIds = [];
-      const relatedIssues=row["Related issues"].split(",");
-      if(!!relatedIssues){
+      const relatedIssues = row["Related issues"].split(",");
+      if (!!relatedIssues) {
         for (const i of relatedIssues) {
-          relatedOriginalIds.push(i.slice(1+i.indexOf("#")))
+          relatedOriginalIds.push(i.slice(1 + i.indexOf("#")));
         }
       }
 
-      var priority = parseInt(row.Priority.substring(0,1))
+      let priority = parseInt(row.Priority.substring(0, 1));
       if (priority > 7) {
         priority = 1;
-      } else if  (priority > 5) {
+      } else if (priority > 5) {
         priority = 2;
       } else if (priority > 3) {
         priority = 3;
@@ -175,9 +195,9 @@ export class RedmineCsvImporter implements Importer {
         priority = 4;
       }
 
-      const assigneeId = row["Assignee"] && row["Assignee"].length > 0 ? row["Assignee"] : undefined;
+      const assigneeId = row.Assignee && row.Assignee.length > 0 ? row.Assignee : undefined;
 
-      const status = row["Status"] && (row["Status"] === "Review" || row["Status"] === "Codereview") ? "Done" : "Todo";
+      const status = row.Status && (row.Status === "Review" || row.Status === "Codereview") ? "Done" : "Todo";
 
       let labels = tags.filter(tag => !!tag);
       if (row.Tracker === "Internal Bug") {
@@ -189,8 +209,11 @@ export class RedmineCsvImporter implements Importer {
       if (!!categories) {
         labels = labels.concat(categories.filter(tag => !!tag));
       }
-      const createdAt = row["Created"];
-      console.log(description)
+      const createdAt = row.Created;
+      if (comments.length > 0) {
+        description = description.concat("  \n  \n## Original Comments:\n");
+      }
+      // console.log(description);
       importData.issues.push({
         title,
         description,
@@ -203,6 +226,7 @@ export class RedmineCsvImporter implements Importer {
         priority,
         originalId,
         relatedOriginalIds,
+        comments,
       });
 
       for (const lab of labels) {
@@ -212,6 +236,10 @@ export class RedmineCsvImporter implements Importer {
           };
         }
       }
+    }
+
+    for (const user of users) {
+      importData.users[user] = { name: user };
     }
 
     return importData;
