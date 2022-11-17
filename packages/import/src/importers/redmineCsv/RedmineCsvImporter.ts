@@ -119,6 +119,14 @@ export class RedmineCsvImporter implements Importer {
         continue;
       }
 
+      await redmine
+        .update_issue(parseInt(originalId), {
+          issue: { custom_fields: [{ id: 56, name: "Exported to Linear", value: 1 }] },
+        })
+        .catch((err: unknown) => {
+          console.log("Failed updating Exported to Linear field", err);
+        });
+
       const attachments: any[] = response.data.issue.attachments.filter(
         (attachment: any) => attachment.filesize < 50000000
       );
