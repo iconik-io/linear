@@ -168,12 +168,15 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
   }
 
   const teamInfo = await client.team(teamId);
+  const organization = await client.organization;
 
   const issueLabels = await teamInfo?.labels();
+  const organizationLabels = await organization.labels();
   const workflowStates = await teamInfo?.states();
 
   const existingLabelMap = {} as { [name: string]: string };
-  for (const label of issueLabels?.nodes ?? []) {
+  const allLabels = (issueLabels.nodes ?? []).concat(organizationLabels.nodes);
+  for (const label of allLabels) {
     const labelName = label.name?.toLowerCase();
     if (labelName && label.id && !existingLabelMap[labelName]) {
       existingLabelMap[labelName] = label.id;
@@ -194,7 +197,6 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
         name: labelName,
         description: label.description,
         color: label.color,
-        teamId,
       });
 
       const issueLabel = await labelResponse?.issueLabel;
