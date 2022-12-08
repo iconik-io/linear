@@ -3,7 +3,6 @@ import { LinearClient } from "@linear/sdk";
 import chalk from "chalk";
 import { format } from "date-fns";
 import * as inquirer from "inquirer";
-import _ from "lodash";
 import { Comment, Importer, ImportResult } from "./types";
 import { replaceImagesInMarkdown } from "./utils/replaceImages";
 const axios = require("axios");
@@ -189,15 +188,21 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
   const labelMapping = {} as { [id: string]: string };
   for (const labelId of Object.keys(importData.labels)) {
     const label = importData.labels[labelId];
-    const labelName = _.truncate(label.name.trim(), { length: 20 });
+    const labelName = label.name;
     let actualLabelId = existingLabelMap[labelName.toLowerCase()];
 
     if (!actualLabelId) {
-      const labelResponse = await client.issueLabelCreate({
-        name: labelName,
-        description: label.description,
-        color: label.color,
-      });
+      console.log("Label", labelName, "not found. Creating");
+      const labelResponse = await client
+        .issueLabelCreate({
+          name: labelName,
+          description: label.description,
+          color: label.color,
+        })
+        .catch(() => {
+          console.log("Unable to create label", labelName);
+          return undefined;
+        });
 
       const issueLabel = await labelResponse?.issueLabel;
       if (issueLabel?.id) {
@@ -234,7 +239,9 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
         ? await buildComments(client, issueDescription || "", issue.comments, importData)
         : issueDescription;
 
-    const labelIds = issue.labels ? issue.labels.map(labelId => labelMapping[labelId]) : undefined;
+    const labelIds = issue.labels
+      ? issue.labels.map(labelId => labelMapping[labelId]).filter(id => Boolean(id))
+      : undefined;
 
     let stateId = !!issue.status ? existingStateMap[issue.status.toLowerCase()] : undefined;
     // Create a new state since one doesn't already exist with this name
