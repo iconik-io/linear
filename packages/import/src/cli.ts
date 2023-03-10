@@ -7,6 +7,7 @@ import { githubImport } from "./importers/github";
 import { jiraCsvImport } from "./importers/jiraCsv";
 import { linearCsvImporter } from "./importers/linearCsv";
 import { pivotalCsvImport } from "./importers/pivotalCsv";
+import { redmineCsvImport } from "./importers/redmineCsv";
 import { shortcutCsvImport } from "./importers/shortcutCsv";
 import { trelloJsonImport } from "./importers/trelloJson";
 import { importIssues } from "./importIssues";
@@ -44,6 +45,14 @@ inquirer.registerPrompt("filePath", require("inquirer-file-path"));
             value: "pivotalCsv",
           },
           {
+            name: "Redmine (CSV export)",
+            value: "redmineCsv",
+          },
+          {
+            name: "Redmine (CSV export)",
+            value: "redmineCsv",
+          },
+          {
             name: "Shortcut (CSV export)",
             value: "shortcutCsv",
           },
@@ -73,6 +82,9 @@ inquirer.registerPrompt("filePath", require("inquirer-file-path"));
         break;
       case "pivotalCsv":
         importer = await pivotalCsvImport();
+        break;
+      case "redmineCsv":
+        importer = await redmineCsvImport();
         break;
       case "shortcutCsv":
         importer = await shortcutCsvImport();

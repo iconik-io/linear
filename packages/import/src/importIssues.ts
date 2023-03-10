@@ -1,11 +1,12 @@
 /* eslint-disable no-console */
 import { LinearClient } from "@linear/sdk";
-import { format } from "date-fns";
 import chalk from "chalk";
+import { format } from "date-fns";
+import fs from "fs";
 import * as inquirer from "inquirer";
-import _ from "lodash";
 import { Comment, Importer, ImportResult } from "./types";
 import { replaceImagesInMarkdown } from "./utils/replaceImages";
+const axios = require("axios");
 
 interface ImportAnswers {
   newTeam: boolean;
@@ -166,12 +167,15 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
   }
 
   const teamInfo = await client.team(teamId);
+  const organization = await client.organization;
 
   const issueLabels = await teamInfo?.labels();
+  const organizationLabels = await organization.labels();
   const workflowStates = await teamInfo?.states();
 
   const existingLabelMap = {} as { [name: string]: string };
-  for (const label of issueLabels?.nodes ?? []) {
+  const allLabels = (issueLabels.nodes ?? []).concat(organizationLabels.nodes);
+  for (const label of allLabels) {
     const labelName = label.name?.toLowerCase();
     if (labelName && label.id && !existingLabelMap[labelName]) {
       existingLabelMap[labelName] = label.id;
@@ -184,16 +188,21 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
   const labelMapping = {} as { [id: string]: string };
   for (const labelId of Object.keys(importData.labels)) {
     const label = importData.labels[labelId];
-    const labelName = _.truncate(label.name.trim(), { length: 20 });
+    const labelName = label.name;
     let actualLabelId = existingLabelMap[labelName.toLowerCase()];
 
     if (!actualLabelId) {
-      const labelResponse = await client.createIssueLabel({
-        name: labelName,
-        description: label.description,
-        color: label.color,
-        teamId,
-      });
+      console.log("Label", labelName, "not found. Creating");
+      const labelResponse = await client
+        .createIssueLabel({
+          name: labelName,
+          description: label.description,
+          color: label.color,
+        })
+        .catch(() => {
+          console.log("Unable to create label", labelName);
+          return undefined;
+        });
 
       const issueLabel = await labelResponse?.issueLabel;
       if (issueLabel?.id) {
@@ -220,18 +229,19 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
     }
   }
 
+  const originalIdmap = {} as { [name: string]: string };
   // Create issues
   for (const issue of importData.issues) {
-    const issueDescription = issue.description
-      ? await replaceImagesInMarkdown(client, issue.description, importData.resourceURLSuffix)
-      : undefined;
+    const issueDescription = issue.description;
 
     const description =
       importAnswers.includeComments && issue.comments
         ? await buildComments(client, issueDescription || "", issue.comments, importData)
         : issueDescription;
 
-    const labelIds = issue.labels ? issue.labels.map(labelId => labelMapping[labelId]) : undefined;
+    const labelIds = issue.labels
+      ? issue.labels.map(labelId => labelMapping[labelId]).filter(id => Boolean(id))
+      : undefined;
 
     let stateId = !!issue.status ? existingStateMap[issue.status.toLowerCase()] : undefined;
     // Create a new state since one doesn't already exist with this name
@@ -270,7 +280,7 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
 
     const formattedDueDate = issue.dueDate ? format(issue.dueDate, "yyyy-MM-dd") : undefined;
 
-    await client.createIssue({
+    const newIssue = await client.createIssue({
       teamId,
       projectId: projectId as unknown as string,
       title: issue.title,
@@ -281,6 +291,91 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
       assigneeId,
       dueDate: formattedDueDate,
     });
+    const newId = (await newIssue.issue)?.id;
+    console.log(JSON.stringify(newIssue));
+    if (!!newId) {
+      if (!!issue.originalId) {
+        originalIdmap[issue.originalId] = newId;
+        console.error(`Adding ${issue.originalId} to ${newId} `);
+      }
+      // if (!!issue.relatedOriginalIds) {
+      //   for (const relatedId of issue.relatedOriginalIds) {
+      //     console.error(`Checking ${relatedId}`);
+      //     if (!!originalIdmap[relatedId]) {
+      //       client.createIssueRelation({
+      //         issueId: newId,
+      //         relatedIssueId: originalIdmap[relatedId],
+      //         type: IssueRelationType.Related,
+      //       });
+      //     }
+      //   }
+      // }
+      //console.error(JSON.stringify(await client.issue(newId), null, 4));
+      if (!!issue.url) {
+        await client.attachmentLinkURL(newId, issue.url, { title: "Original Redmine issue" });
+      }
+      if (!!issue.extraUrls) {
+        for (const url of issue.extraUrls) {
+          await client.attachmentLinkURL(newId, url.url, !!url.title ? { title: url.title } : {});
+        }
+      }
+      const files: string[] = [];
+      const dir = `/tmp/redmineimporter/${issue.originalId}`;
+      if (!!issue.originalId) {
+        if (fs.existsSync(dir)) {
+          fs.readdirSync(dir).forEach(file => {
+            console.log(file);
+            files.push(file);
+          });
+        }
+      }
+      if (files.length > 0) {
+        let desc = description;
+        let attachmentHeader = "# Attachments:\n\n";
+        for (const file of files) {
+          let contentType = "application/octet-stream";
+          let isImage = "";
+          if (file.toLowerCase().includes(".jpg")) {
+            contentType = "image/jpg";
+            isImage = "!";
+          } else if (file.toLowerCase().includes(".png")) {
+            contentType = "image/png";
+            isImage = "!";
+          }
+          const stats = fs.statSync(dir + "/" + file);
+          const fileSizeInBytes = stats.size;
+
+          const uploadData = await client.fileUpload(contentType, file, fileSizeInBytes);
+          console.log(`UPLOAD: ${JSON.stringify(uploadData)}`);
+          const stream = fs.createReadStream(dir + "/" + file);
+          const headers = {};
+          for (const h of uploadData.uploadFile?.headers || []) {
+            headers[h.key] = h.value;
+          }
+          headers["content-type"] = uploadData.uploadFile?.contentType;
+          const upload = await axios({
+            method: "put",
+            url: uploadData.uploadFile?.uploadUrl,
+            data: stream,
+            headers: headers,
+            maxBodyLength: 100_000_000,
+          });
+          console.log(`RESULT: ${upload.status}`);
+          const issue = await client.issue(newId);
+          console.log(JSON.stringify(issue));
+          const imageString = `![](${file})`;
+          if (desc?.includes(imageString)) {
+            desc = desc.replace(imageString, `${isImage}[${file}](${uploadData.uploadFile?.assetUrl})`);
+          } else {
+            desc = desc + `\n${attachmentHeader}${isImage}[${file}](${uploadData.uploadFile?.assetUrl})\n`;
+            attachmentHeader = "";
+          }
+          await client.updateIssue(newId, { description: desc });
+        }
+      }
+    } else {
+      console.error("No id on newly created issue");
+    }
   }
 
   console.info(chalk.green(`${importer.name} issues imported to your team: https://linear.app/team/${teamKey}/all`));

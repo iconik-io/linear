@@ -16,6 +16,8 @@ export interface Issue {
   labels?: string[];
   /** Link to original issue. */
   url?: string;
+  /** Link to original issue. */
+  extraUrls?: Url[];
   /** When the issue was created. */
   createdAt?: Date;
   /** When the issue is due. This is a date string of the format yyyy-MM-dd. */
@@ -24,6 +26,10 @@ export interface Issue {
   completedAt?: Date;
   /** When the issue was started. */
   startedAt?: Date;
+  /** Original ID. */
+  originalId?: string;
+  /** List of related original Ids. */
+  relatedOriginalIds?: string[];
 }
 
 /** Issue comment */
@@ -34,6 +40,14 @@ export interface Comment {
   userId: string;
   /** When the comment was created. */
   createdAt?: Date;
+}
+
+/** Issue comment */
+export interface Url {
+  /** Comment's body in markdown */
+  title?: string;
+  /** User who posted the comments */
+  url: string;
 }
 
 export type IssueStatus = "backlog" | "unstarted" | "started" | "completed" | "canceled";
