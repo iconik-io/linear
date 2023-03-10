@@ -1,5 +1,28 @@
 # Change Log
 
+## 1.11.2
+
+### Patch Changes
+
+- e9489d3: chore(deps): update dependency patch versions
+- 4254b6a: Edit rollup config for dev
+
+## 1.11.1
+
+### Patch Changes
+
+- 921a28b: chore(deps): update dependency patch versions
+
+## 1.11.0
+
+### Minor Changes
+
+- 5604ab9: Use prefixed mutations
+
+### Patch Changes
+
+- 980454f: Removed deprecated rollup plugin `rollup-plugin-size-snapshot`
+
 ## 1.10.0
 
 ### Minor Changes

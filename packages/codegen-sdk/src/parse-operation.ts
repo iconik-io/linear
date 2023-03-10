@@ -1,18 +1,28 @@
 import { Types } from "@graphql-codegen/plugin-helpers";
 import {
   ArgDefinition,
+  Doc,
   getArgList,
   getOptionalVariables,
   getRequiredVariables,
+  lowerFirst,
   nonNullable,
   PluginContext,
   printList,
+  printPrefixedMutationName,
   printPascal,
   printTypescriptType,
   reduceNonNullType,
   upperFirst,
 } from "@linear/codegen-doc";
-import { DocumentNode, FieldNode, FragmentSpreadNode, Kind, OperationDefinitionNode } from "graphql";
+import {
+  DocumentNode,
+  FieldNode,
+  FragmentSpreadNode,
+  Kind,
+  ObjectTypeDefinitionNode,
+  OperationDefinitionNode,
+} from "graphql";
 import { Sdk } from "./constants";
 import { printNamespaced } from "./print";
 import { SdkDefinitions, SdkModel, SdkOperation, SdkOperationPrint, SdkPluginConfig } from "./types";
@@ -53,10 +63,24 @@ export function parseOperations(
   const operations = getOperations(documents);
 
   return operations.reduce<SdkDefinitions>((acc, node) => {
-    const path = (node.name?.value ?? "").split("_");
+    const nodeName = node.name?.value ?? "";
+    let path;
+
+    if (
+      node.operation === "mutation" &&
+      hasBeenTransformed(
+        nodeName,
+        context.mutations.map(mutationNode => mutationNode.name.value)
+      )
+    ) {
+      path = getSuffixedMutationName(nodeName).split("_");
+    } else {
+      path = nodeName.split("_");
+    }
+
     const sdkPath = path.slice(0, path.length - 1);
     const sdkKey = sdkPath.join("_");
-    const operationName = printPascal(node.name?.value);
+    const operationName = printPascal(nodeName);
     const operationType = printPascal(node.operation);
 
     /** Identify returned field node */
@@ -70,12 +94,14 @@ export function parseOperations(
     const fragmentNode = returnedField?.selectionSet?.selections.find(selection => {
       return selection.kind === Kind.FRAGMENT_SPREAD;
     }) as FragmentSpreadNode | undefined;
-    const fragment = context.objects.find(object => object.name.value === fragmentNode?.name.value);
+    const fragment =
+      context.objects.find(object => object.name.value === fragmentNode?.name.value) ??
+      context.interfaces.find(i => i.name.value === fragmentNode?.name.value);
 
     /** Find a matching query or mutation for descriptions */
     const query =
       context.queries.find(q => q.name.value === node.name?.value) ??
-      context.mutations.find(q => q.name.value === node.name?.value);
+      context.mutations.find(m => printPrefixedMutationName(m.name.value) === node.name?.value);
 
     /** Identify list types */
     const queryType = printTypescriptType(context, query?.type);
@@ -101,6 +127,15 @@ export function parseOperations(
     const nonNullQuery = query?.type && reduceNonNullType(query?.type);
     const nonNull = Boolean(nonNullQuery || ((parent ? parent?.nonNull : true) && nonNullField));
 
+    /** Identify whether the response is an interface type and collect all interface implementations. */
+    const returnsInterface = context.interfaces?.some(i => i.name.value === modelName);
+    const implementations: string[] = returnsInterface
+      ? context.interfaceImplementations[modelName]?.map((imp: ObjectTypeDefinitionNode) => imp.name.value) ?? []
+      : [];
+
+    /** If the return is an interface, we can return any implementation. */
+    const returnValue = returnsInterface ? [...implementations, modelName].join(" | ") : listType ?? modelName;
+
     /** Store printable type names */
     const print: SdkOperationPrint = {
       /** The name of the operation */
@@ -122,7 +157,7 @@ export function parseOperations(
       /** The name of the model in a list, if a list */
       list: listType?.replace("[]", ""),
       /** The returned promise result from fetch  */
-      promise: `${Sdk.FETCH_TYPE}<${listType ?? modelName}${nonNull ? "" : " | undefined"}>`,
+      promise: `${Sdk.FETCH_TYPE}<${returnValue}${nonNull ? "" : " | undefined"}>`,
       /** The typescript safe path through the response to the data */
       responsePath,
     };
@@ -193,4 +228,25 @@ export function parseOperations(
       },
     };
   }, {});
+}
+
+/**
+ * Checks whether a mutation has been transformed into a prefixed form.
+ * @param nodeName The current name of the node.
+ * @param originalMutations The list of mutations before any modification.
+ */
+function hasBeenTransformed(nodeName: string, originalMutations: string[]): boolean {
+  return !originalMutations.includes(nodeName);
+}
+
+/**
+ * Gets the original suffixed mutation name from the prefixed mutation name.
+ * @param nodeName The prefixed mutation name
+ */
+function getSuffixedMutationName(nodeName: string): string {
+  const mutationType = Doc.MUTATION_TYPES.find(type => nodeName.startsWith(type));
+  if (mutationType) {
+    return lowerFirst(`${nodeName.replace(mutationType, "")}${upperFirst(mutationType)}`);
+  }
+  return nodeName;
 }

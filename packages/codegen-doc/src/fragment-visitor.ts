@@ -17,6 +17,7 @@ import { printGraphqlComment, printGraphqlDebug, printGraphqlDescription, printL
 import { findQuery } from "./query";
 import { Fragment, Named, NamedFields, PluginContext } from "./types";
 import { nonNullable, reduceTypeName } from "./utils";
+import { conflictsWithInterfaceDefinition } from "./interface";
 
 /**
  * Graphql-codegen visitor for processing the ast and generating fragments
@@ -66,6 +67,7 @@ export class FragmentVisitor {
           printGraphqlDescription(node.description?.value),
           printGraphqlDebug(node),
           `fragment ${node.name} on ${node.name} {
+            __typename
             ${printLines(node.fields.sort())}
           }`,
           " ",
@@ -88,8 +90,23 @@ export class FragmentVisitor {
         printGraphqlDescription(node.description?.value),
         printGraphqlDebug(node),
         `fragment ${node.name} on ${node.name} {
+          __typename
           ${printLines(node.fields.sort())}
-        }`,
+            ${(
+              this._context.interfaceImplementations[node.name]
+                ?.filter(
+                  interfaceImplementation =>
+                    !conflictsWithInterfaceDefinition(interfaceImplementation, this._context.interfaces)
+                )
+                .map(
+                  obj => `
+                ... on ${obj.name.value} {
+                  ... ${obj.name.value}
+                }`
+                ) ?? []
+            ).join("\n")}
+          }
+        `,
       ]);
     },
   };

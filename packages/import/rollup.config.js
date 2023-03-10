@@ -3,9 +3,20 @@ import json from "@rollup/plugin-json";
 import resolve from "@rollup/plugin-node-resolve";
 import typescript from "@rollup/plugin-typescript";
 import gzip from "rollup-plugin-gzip";
-import { sizeSnapshot } from "rollup-plugin-size-snapshot";
 import { terser } from "rollup-plugin-terser";
 import { brotliCompressSync } from "zlib";
+
+const minPlugins =
+  process.env.NODE_ENV === "development"
+    ? []
+    : [
+        terser(),
+        gzip(),
+        gzip({
+          customCompression: content => brotliCompressSync(Buffer.from(content)),
+          fileName: ".br",
+        }),
+      ];
 
 export default [
   {
@@ -36,19 +47,7 @@ export default [
         sourcemap: true,
       },
     ],
-    plugins: [
-      typescript(),
-      resolve(),
-      commonjs(),
-      json(),
-      sizeSnapshot(),
-      terser(),
-      gzip(),
-      gzip({
-        customCompression: content => brotliCompressSync(Buffer.from(content)),
-        fileName: ".br",
-      }),
-    ],
+    plugins: [typescript(), resolve(), commonjs(), json(), ...minPlugins],
   },
   {
     input: "src/index.ts",

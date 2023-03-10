@@ -2,7 +2,7 @@
   "name": "@linear/codegen-doc",
   "private": true,
   "description": "Plugin for generating GraphQL fragments and documents from a schema",
-  "version": "1.10.1",
+  "version": "1.12.1",
   "author": "Linear Orbit, Inc",
   "license": "MIT",
   "main": "dist/index-cjs.min.js",
@@ -17,7 +17,7 @@
     "dist"
   ],
   "scripts": {
-    "build:clean": "npx rimraf dist",
+    "build:clean": "npx rimraf -G dist .rollup-cache tsconfig.tsbuildinfo",
     "build:codegen-doc": "run-s build:clean build:rollup",
     "build:rollup": "npx rollup -c"
   },
@@ -33,8 +33,6 @@
     "graphql": "^15.4.0",
     "rollup": "^2.38.3",
     "rollup-plugin-gzip": "^2.5.0",
-    "rollup-plugin-size-snapshot": "^0.12.0",
-    "rollup-plugin-terser": "^7.0.2",
-    "typescript": "^4.0.5"
+    "rollup-plugin-terser": "^7.0.2"
   }
 }

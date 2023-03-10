@@ -1,5 +1,49 @@
 # Change Log
 
+## 1.6.2
+
+### Patch Changes
+
+- e9489d3: chore(deps): update dependency patch versions
+- 4254b6a: Edit rollup config for dev
+- Updated dependencies [e9489d3]
+- Updated dependencies [8c5225b]
+- Updated dependencies [9917a58]
+- Updated dependencies [8c5225b]
+- Updated dependencies [8c5225b]
+- Updated dependencies [4254b6a]
+  - @linear/sdk@2.2.0
+
+## 1.6.1
+
+### Patch Changes
+
+- 921a28b: chore(deps): update dependency patch versions
+- Updated dependencies [921a28b]
+- Updated dependencies [edf0c13]
+- Updated dependencies [edf0c13]
+- Updated dependencies [21b3b4f]
+  - @linear/sdk@2.1.0
+
+## 1.6.0
+
+### Minor Changes
+
+- 5604ab9: Use prefixed mutations
+
+### Patch Changes
+
+- dec5d48: fix: improve import cli success message
+- 5e25484: chore(import): rename Clubhouse -> Shortcut
+- 980454f: Removed deprecated rollup plugin `rollup-plugin-size-snapshot`
+- Updated dependencies [5604ab9]
+- Updated dependencies [2c682eb]
+- Updated dependencies [2457fd0]
+- Updated dependencies [5604ab9]
+- Updated dependencies [5604ab9]
+- Updated dependencies [980454f]
+  - @linear/sdk@2.0.0
+
 ## 1.5.17
 
 ### Patch Changes

@@ -2,11 +2,11 @@
 import { LinearClient } from "@linear/sdk";
 import chalk from "chalk";
 import { format } from "date-fns";
+import fs from "fs";
 import * as inquirer from "inquirer";
 import { Comment, Importer, ImportResult } from "./types";
 import { replaceImagesInMarkdown } from "./utils/replaceImages";
 const axios = require("axios");
-const fs = require("fs");
 
 interface ImportAnswers {
   newTeam: boolean;
@@ -147,7 +147,7 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
   let teamId: string | undefined;
   if (importAnswers.newTeam) {
     // Create a new team
-    const teamResponse = await client.teamCreate({
+    const teamResponse = await client.createTeam({
       name: importAnswers.teamName as string,
     });
     const team = await teamResponse?.team;
@@ -194,7 +194,7 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
     if (!actualLabelId) {
       console.log("Label", labelName, "not found. Creating");
       const labelResponse = await client
-        .issueLabelCreate({
+        .createIssueLabel({
           name: labelName,
           description: label.description,
           color: label.color,
@@ -252,7 +252,7 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
       } else if (issue.startedAt) {
         stateType = "started";
       }
-      const newStateResult = await client.workflowStateCreate({
+      const newStateResult = await client.createWorkflowState({
         name: issue.status,
         teamId,
         color: defaultStateColors[stateType],
@@ -280,7 +280,7 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
 
     const formattedDueDate = issue.dueDate ? format(issue.dueDate, "yyyy-MM-dd") : undefined;
 
-    const newIssue = await client.issueCreate({
+    const newIssue = await client.createIssue({
       teamId,
       projectId: projectId as unknown as string,
       title: issue.title,
@@ -291,89 +291,94 @@ export const importIssues = async (apiKey: string, importer: Importer): Promise<
       assigneeId,
       dueDate: formattedDueDate,
     });
-    const newId = newIssue._issue.id;
-    const descriptionData = newIssue._issue;
+    const newId = (await newIssue.issue)?.id;
     console.log(JSON.stringify(newIssue));
-    if (!!issue.originalId) {
-      originalIdmap[issue.originalId] = newId;
-      console.error(`Adding ${issue.originalId} to ${newId} `);
-    }
-    if (!!issue.relatedOriginalIds) {
-      for (const relatedId of issue.relatedOriginalIds) {
-        console.error(`Checking ${relatedId}`);
-        if (!!originalIdmap[relatedId]) {
-          client.issueRelationCreate({ issueId: newId, relatedIssueId: originalIdmap[relatedId], type: "related" });
+    if (!!newId) {
+      if (!!issue.originalId) {
+        originalIdmap[issue.originalId] = newId;
+        console.error(`Adding ${issue.originalId} to ${newId} `);
+      }
+      // if (!!issue.relatedOriginalIds) {
+      //   for (const relatedId of issue.relatedOriginalIds) {
+      //     console.error(`Checking ${relatedId}`);
+      //     if (!!originalIdmap[relatedId]) {
+      //       client.createIssueRelation({
+      //         issueId: newId,
+      //         relatedIssueId: originalIdmap[relatedId],
+      //         type: IssueRelationType.Related,
+      //       });
+      //     }
+      //   }
+      // }
+      //console.error(JSON.stringify(await client.issue(newId), null, 4));
+      if (!!issue.url) {
+        await client.attachmentLinkURL(newId, issue.url, { title: "Original Redmine issue" });
+      }
+      if (!!issue.extraUrls) {
+        for (const url of issue.extraUrls) {
+          await client.attachmentLinkURL(newId, url.url, !!url.title ? { title: url.title } : {});
         }
       }
-    }
-    //console.error(JSON.stringify(await client.issue(newId), null, 4));
-    if (!!issue.url) {
-      await client.attachmentLinkURL(newId, issue.url, { title: "Original Redmine issue" });
-    }
-    if (!!issue.extraUrls) {
-      for (const url of issue.extraUrls) {
-        await client.attachmentLinkURL(newId, url.url, !!url.title ? { title: url.title } : {});
-      }
-    }
-    var files = [];
-    const dir = `/tmp/redmineimporter/${issue.originalId}`;
-    if (!!issue.originalId) {
-      if (fs.existsSync(dir)) {
-        fs.readdirSync(dir).forEach(file => {
-          console.log(file);
-          files.push(file);
-        });
-      }
-    }
-    if (!!files) {
-      let desc = description;
-      let attachmentHeader = "# Attachments:\n\n";
-      for (const file of files) {
-        let contentType = "application/octet-stream";
-        let isImage = "";
-        if (file.toLowerCase().includes(".jpg")) {
-          contentType = "image/jpg";
-          isImage = "!";
-        } else if (file.toLowerCase().includes(".png")) {
-          contentType = "image/png";
-          isImage = "!";
+      const files: string[] = [];
+      const dir = `/tmp/redmineimporter/${issue.originalId}`;
+      if (!!issue.originalId) {
+        if (fs.existsSync(dir)) {
+          fs.readdirSync(dir).forEach(file => {
+            console.log(file);
+            files.push(file);
+          });
         }
-        const stats = fs.statSync(dir + "/" + file);
-        const fileSizeInBytes = stats.size;
+      }
+      if (files.length > 0) {
+        let desc = description;
+        let attachmentHeader = "# Attachments:\n\n";
+        for (const file of files) {
+          let contentType = "application/octet-stream";
+          let isImage = "";
+          if (file.toLowerCase().includes(".jpg")) {
+            contentType = "image/jpg";
+            isImage = "!";
+          } else if (file.toLowerCase().includes(".png")) {
+            contentType = "image/png";
+            isImage = "!";
+          }
+          const stats = fs.statSync(dir + "/" + file);
+          const fileSizeInBytes = stats.size;
 
-        const uploadData = await client.fileUpload(contentType, file, fileSizeInBytes);
-        console.log(`UPLOAD: ${JSON.stringify(uploadData)}`);
-        const stream = fs.createReadStream(dir + "/" + file);
-        const headers = {};
-        for (const h of uploadData.uploadFile.headers) {
-          headers[h.key] = h.value;
+          const uploadData = await client.fileUpload(contentType, file, fileSizeInBytes);
+          console.log(`UPLOAD: ${JSON.stringify(uploadData)}`);
+          const stream = fs.createReadStream(dir + "/" + file);
+          const headers = {};
+          for (const h of uploadData.uploadFile?.headers || []) {
+            headers[h.key] = h.value;
+          }
+          headers["content-type"] = uploadData.uploadFile?.contentType;
+          const upload = await axios({
+            method: "put",
+            url: uploadData.uploadFile?.uploadUrl,
+            data: stream,
+            headers: headers,
+            maxBodyLength: 100_000_000,
+          });
+          console.log(`RESULT: ${upload.status}`);
+          const issue = await client.issue(newId);
+          console.log(JSON.stringify(issue));
+          const imageString = `![](${file})`;
+          if (desc?.includes(imageString)) {
+            desc = desc.replace(imageString, `${isImage}[${file}](${uploadData.uploadFile?.assetUrl})`);
+          } else {
+            desc = desc + `\n${attachmentHeader}${isImage}[${file}](${uploadData.uploadFile?.assetUrl})\n`;
+            attachmentHeader = "";
+          }
+          await client.updateIssue(newId, { description: desc });
         }
-        headers["content-type"] = uploadData.uploadFile?.contentType;
-        const upload = await axios({
-          method: "put",
-          url: uploadData.uploadFile?.uploadUrl,
-          data: stream,
-          headers: headers,
-          maxBodyLength: 100_000_000,
-        });
-        console.log(`RESULT: ${upload.status}`);
-        const issue = await client.issue(newId);
-        console.log(JSON.stringify(issue));
-        const imageString = `![](${file})`;
-        if (desc?.includes(imageString)) {
-          desc = desc.replace(imageString, `${isImage}[${file}](${uploadData.uploadFile?.assetUrl})`);
-        } else {
-          desc = desc + `\n${attachmentHeader}${isImage}[${file}](${uploadData.uploadFile?.assetUrl})\n`;
-          attachmentHeader = "";
-        }
-        await client.issueUpdate(newId, { description: desc });
       }
+    } else {
+      console.error("No id on newly created issue");
     }
   }
 
-  console.error(
-    chalk.green(`${importer.name} issues imported to your backlog: https://linear.app/team/${teamKey}/backlog`)
-  );
+  console.info(chalk.green(`${importer.name} issues imported to your team: https://linear.app/team/${teamKey}/all`));
 };
 
 // Build comments into issue description

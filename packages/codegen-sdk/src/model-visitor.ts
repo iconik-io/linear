@@ -23,6 +23,7 @@ import { Sdk } from "./constants";
 import { printNamespaced } from "./print";
 import {
   SdkConnectionField,
+  SdkInterfaceField,
   SdkListField,
   SdkModel,
   SdkModelField,
@@ -36,10 +37,15 @@ import {
 } from "./types";
 
 /**
- * Ensure the models is not a root operation or edge
+ * Ensure the models is not a root operation, a edge, or has a skip comment.
  */
-function isValidModel(model: ObjectTypeDefinitionNode | InterfaceTypeDefinitionNode) {
-  return !Object.keys(OperationType).includes(lowerFirst(model.name.value)) && !model.name.value.endsWith("Edge");
+function isValidModel(model: ObjectTypeDefinitionNode | InterfaceTypeDefinitionNode, context: PluginContext) {
+  const skipComment = context.config.skipComments?.some(comment => model.description?.value.includes(comment));
+  return (
+    !Object.keys(OperationType).includes(lowerFirst(model.name.value)) &&
+    !model.name.value.endsWith("Edge") &&
+    !skipComment
+  );
 }
 
 /**
@@ -171,7 +177,7 @@ export class ModelVisitor {
 }
 
 function leaveObjectOrInterface(_node: ObjectTypeDefinitionNode | InterfaceTypeDefinitionNode): SdkModel | undefined {
-  if (isValidModel(_node) && _node.fields?.length) {
+  if (isValidModel(_node, this._context) && _node.fields?.length) {
     const node = _node as SdkModelNode;
     const name = node.name.value;
     const fields = node.fields;
@@ -185,6 +191,8 @@ function leaveObjectOrInterface(_node: ObjectTypeDefinitionNode | InterfaceTypeD
         scalar: (fields?.filter(field => field.__typename === SdkModelFieldType.scalar) ?? []) as SdkScalarField[],
         query: (fields?.filter(field => field.__typename === SdkModelFieldType.query) ?? []) as SdkQueryField[],
         object: (fields?.filter(field => field.__typename === SdkModelFieldType.object) ?? []) as SdkObjectField[],
+        interface: (fields?.filter(field => field.__typename === SdkModelFieldType.interface) ??
+          []) as SdkInterfaceField[],
         list: (fields?.filter(field => field.__typename === SdkModelFieldType.list) ?? []) as SdkListField[],
         scalarList: (fields?.filter(field => field.__typename === SdkModelFieldType.scalarList) ??
           []) as SdkScalarListField[],
